@@ -1,0 +1,16 @@
+services:
+  protonmail-bridge:
+    image: dancwilliams/protonmail-bridge:latest
+    ports:
+      - 1025:25/tcp
+      - 1143:143/tcp
+    restart: unless-stopped
+    volumes:
+      - protonmail:/root
+    # Optional: set a passphrase to encrypt the GPG keyring (see README)
+    # environment:
+    #   - KEYRING_PASSPHRASE=your-passphrase-here
+
+volumes:
+  protonmail:
+    name: protonmail
