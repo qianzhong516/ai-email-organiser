@@ -2,6 +2,8 @@
 """Apply TEST to the newest inbox arrival through local Proton Mail Bridge."""
 
 import argparse
+from email import policy
+from email.parser import BytesParser
 import getpass
 import imaplib
 import os
@@ -26,7 +28,21 @@ def label_latest(mail, dry_run=False):
     # UIDs increase as messages arrive in this mailbox.
     uid = max(uids, key=int)
     if dry_run:
+        fetched = checked(mail.uid("FETCH", uid, "(BODY.PEEK[])"))
+        raw = next((item[1] for item in fetched if isinstance(item, tuple)), None)
+        if raw is None:
+            raise RuntimeError("The latest message is no longer available; try again.")
+        message = BytesParser(policy=policy.default).parsebytes(raw)
+        body = message.get_body(preferencelist=("plain", "html"))
         print(f"Would apply TEST to inbox message UID {uid.decode()}.")
+        print(f"Subject: {message.get('Subject', '(no subject)')}")
+        print()
+        if body is None:
+            print("(No text body.)")
+        else:
+            if body.get_content_type() == "text/html":
+                print("[HTML body]")
+            print(body.get_content())
         return
 
     # Bridge represents labels as virtual mailboxes. COPY adds a label.
@@ -41,7 +57,7 @@ def label_latest(mail, dry_run=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=1143)
-    parser.add_argument("--dry-run", action="store_true", help="Preview without changes")
+    parser.add_argument("--dry-run", action="store_true", help="Print subject and body without changes")
     args = parser.parse_args()
     username = os.environ.get("BRIDGE_USERNAME") or input("Bridge username: ").strip()
     password = os.environ.get("BRIDGE_PASSWORD") or getpass.getpass("Bridge password: ")

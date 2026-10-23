@@ -10,7 +10,16 @@ services:
     # Optional: set a passphrase to encrypt the GPG keyring (see README)
     # environment:
     #   - KEYRING_PASSPHRASE=your-passphrase-here
+  ollama:
+    image: ollama/ollama
+    ports:
+      - 11434:11434
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
 
 volumes:
   protonmail:
     name: protonmail
+  ollama:
+    name: ollama

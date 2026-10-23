@@ -13,6 +13,10 @@ python3 label_latest.py --dry-run
 python3 label_latest.py
 ```
 
+Dry-run mode prints the latest message's subject and body without applying a
+label or marking it as read. It prefers plain text, falling back to the HTML
+source for messages that only have an HTML body. Attachments are not printed.
+
 Credentials are prompted for; the password is hidden and neither is saved.
 For automation, `BRIDGE_USERNAME` and `BRIDGE_PASSWORD` environment variables
 are also supported. Use `--port 1144` if your Bridge listens on a different port.
