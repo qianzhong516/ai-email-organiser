@@ -142,7 +142,13 @@ def test_valid_dataset_preserves_labels_and_separates_prediction(inputs, email_r
 
     result = classify_emails(path, prompt_path=prompt)
 
-    assert result == [{**email_record, "prediction": prediction}]
+    assert result == [{
+        **email_record,
+        "prediction": prediction,
+        "execution_time_seconds": result[0]["execution_time_seconds"],
+    }]
+    assert isinstance(result[0]["execution_time_seconds"], float)
+    assert result[0]["execution_time_seconds"] >= 0
     assert path.read_text(encoding="utf-8") == source
     request = opener.return_value.open.call_args.args[0]
     model_input = json.loads(json.loads(request.data)["messages"][1]["content"])

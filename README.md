@@ -1,7 +1,15 @@
 ### Hardware requirements
 
-CPU: 4 cores
-Memory: 12GB
+CPU: > 3 cores
+Memory: >= 7GB, < 12GB
+
+A snapshot of `docker stats`:
+
+```
+CONTAINER ID   NAME                                  CPU %     MEM USAGE / LIMIT     MEM %     NET I/O         BLOCK I/O        PIDS
+70cb8027b55e   email-organiser-ollama-1              297.84%   6.52GiB / 11.67GiB    55.89%    463kB / 108kB   0B / 4.1kB       37
+0274f99bc760   email-organiser-protonmail-bridge-1   0.00%     132.5MiB / 11.67GiB   1.11%     480kB / 161kB   140MB / 1.27MB   21
+```
 
 ### Start the app
 
@@ -89,6 +97,17 @@ provide an `on_result` callback; the CLI uses that callback to save incrementall
 
 ### Measure prediction accuracy
 
+To score an existing predictions file without calling Ollama:
+
+```bash
+python3 calculate_accuracy.py --input data/results/example_predictions.json --reference data/datasets/development_emails.json
+```
+
+The command writes a timestamped accuracy report under `data/results` and prints
+the score. Both files must contain exactly the same email IDs. Human labels come
+from the reference file's `expected.sender_type`; null labels are excluded from
+the accuracy calculation.
+
 ```python
 from classify_emails import classify_emails, output_accuracy
 
@@ -113,3 +132,4 @@ does not call Ollama or modify any files.
 - Use separate datasets (development and testing) to avoid bias.
 - Define function/module boundaries for AI and only use it to fill in the function logic, instead of telling it one purpose and leave it inventing things all over the place.
 - Set resources limits on the AI model to prevent it consuming all of the computing resources.
+- Cached prompt size enables the AI model to cache the same part of the prompts, reducing requests latency. However, if it accumlates too much, it may memory kill the container based on the assigned memory capacity. Set Cached prompt size to a reasonable number according to your application use case.

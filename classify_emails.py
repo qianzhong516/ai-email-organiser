@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+from time import perf_counter
 from typing import Callable
 import urllib.request
 
@@ -18,6 +19,7 @@ import urllib.request
 #         "date": "Sat, 24 Oct 2026 10:00:00 +1100",
 #         "body": "Parsed email text...",
 #         "expected": {"sender_type": null},
+#         "execution_time_seconds": 12.345678,
 #         "prediction": {
 #             "sender_type": "tech",
 #             "explanation": "The author shares a technical tutorial."
@@ -37,7 +39,8 @@ def classify_emails(
 ) -> list[dict]:
     """Classify a development or test JSON dataset using the supplied prompt.
 
-    Sends every field except expected and any previous prediction to Ollama.
+    Sends every field except expected, any previous prediction, and
+    execution_time_seconds to Ollama.
     Returns the same record order, email content, and human expected labels,
     adding prediction with sender_type (tech, recruitment, or others) and a short
     explanation. Compare expected.sender_type with prediction.sender_type for
@@ -47,6 +50,8 @@ def classify_emails(
     complete list. By default it does not save output, access the inbox, or apply
     email labels. Callback errors stop processing and propagate to the caller.
     Timeout is a positive integer in seconds for each Ollama request (default 900).
+    execution_time_seconds measures elapsed time from starting the Ollama request
+    through response parsing and validation, excluding saving the result to disk.
     """
     if type(timeout) is not int or timeout < 1:
         raise ValueError("timeout must be a positive integer in seconds")
@@ -92,7 +97,10 @@ def classify_emails(
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     predictions = []
     for record in records:
-        model_input = {key: value for key, value in record.items() if key not in ("expected", "prediction")}
+        model_input = {
+            key: value for key, value in record.items()
+            if key not in ("expected", "prediction", "execution_time_seconds")
+        }
         payload = {
             "model": model,
             "stream": False,
@@ -108,6 +116,7 @@ def classify_emails(
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
+        started_at = perf_counter()
         try:
             with opener.open(request, timeout=timeout) as response:
                 response_data = json.load(response)
@@ -130,6 +139,7 @@ def classify_emails(
         completed = {
             **record,
             "prediction": prediction,
+            "execution_time_seconds": round(perf_counter() - started_at, 6),
         }
         predictions.append(completed)
         if on_result is not None:
