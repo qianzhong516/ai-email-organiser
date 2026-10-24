@@ -1,3 +1,8 @@
+### Hardware requirements
+
+CPU: 4 cores
+Memory: 12GB
+
 ### Start the app
 
 ```bash
@@ -42,9 +47,22 @@ python3 classify_emails.py --dataset data/datasets/development_emails.json
 ```
 
 For the test dataset, replace the path with `data/datasets/test_emails.json`.
-Optional arguments are `--prompt`, `--model`, and `--ollama-url`. Each invocation
+Optional arguments are `--prompt`, `--model`, `--ollama-url`, and `--timeout`.
+The per-email request timeout defaults to 900 seconds (15 minutes). For example:
+
+```bash
+python3 classify_emails.py --dataset data/datasets/development_emails.json --timeout 1800
+```
+
+Each invocation
 saves timestamped `*_predictions.json` and `*_accuracy.json` files under
-`data/results/` and prints their paths plus the accuracy summary. Previous
+`data/results/`. Each prediction is written and flushed to disk as soon as its
+email finishes, with a progress line printed in the terminal. The predictions
+file remains a JSON array and is readable between record updates. Completed
+records are preserved if a later model request fails or you press Ctrl+C.
+The accuracy report is generated only after the full dataset finishes;
+partial output is not scored as a complete run. The CLI prints the output paths
+and the final accuracy summary. Previous
 results and source datasets are preserved. Null human labels are excluded from
 scoring; if none are labeled, the report has no accuracy percentage.
 
@@ -66,7 +84,8 @@ records preserve email content and human `expected` answers, adding a separate
 `prediction` object with `sender_type` and `explanation`. Compare
 `expected.sender_type` with `prediction.sender_type` to evaluate accuracy; the
 explanation is for inspecting mistakes. The original dataset file is not
-modified, and no output is saved automatically.
+modified. Calling `classify_emails()` directly does not save output unless you
+provide an `on_result` callback; the CLI uses that callback to save incrementally.
 
 ### Measure prediction accuracy
 
@@ -87,3 +106,10 @@ not scored. Unlabeled records are counted separately; if all are unlabeled,
 `accuracy_percent` is `None`. Duplicate IDs or incomplete/mismatched result sets
 raise an error rather than being silently omitted from scoring. This function
 does not call Ollama or modify any files.
+
+### Learnings
+
+- Use datasets and wilson interval to determine the result accuracy range
+- Use separate datasets (development and testing) to avoid bias.
+- Define function/module boundaries for AI and only use it to fill in the function logic, instead of telling it one purpose and leave it inventing things all over the place.
+- Set resources limits on the AI model to prevent it consuming all of the computing resources.

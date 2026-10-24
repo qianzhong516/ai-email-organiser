@@ -1,7 +1,9 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+from typing import Callable
 import urllib.request
 
 
@@ -30,6 +32,8 @@ def classify_emails(
     prompt_path: str | Path = Path(__file__).resolve().parent / "prompting" / "sender_type.txt",
     model: str = "qwen2.5:7b",
     ollama_url: str = "http://127.0.0.1:11434",
+    timeout: int = 900,
+    on_result: Callable[[dict], None] | None = None,
 ) -> list[dict]:
     """Classify a development or test JSON dataset using the supplied prompt.
 
@@ -38,8 +42,14 @@ def classify_emails(
     adding prediction with sender_type (tech, recruitment, or others) and a short
     explanation. Compare expected.sender_type with prediction.sender_type for
     evaluation; explanations are for inspection, not proof of correctness.
-    This function does not save output, access the inbox, or apply email labels.
+    If supplied, on_result receives each completed record immediately, allowing
+    the caller to save results incrementally. The function still returns the
+    complete list. By default it does not save output, access the inbox, or apply
+    email labels. Callback errors stop processing and propagate to the caller.
+    Timeout is a positive integer in seconds for each Ollama request (default 900).
     """
+    if type(timeout) is not int or timeout < 1:
+        raise ValueError("timeout must be a positive integer in seconds")
     records = json.loads(Path(dataset_path).read_text(encoding="utf-8"))
     sender_types = ("tech", "recruitment", "others")
     if not isinstance(records, list):
@@ -99,7 +109,7 @@ def classify_emails(
             headers={"Content-Type": "application/json"},
         )
         try:
-            with opener.open(request, timeout=300) as response:
+            with opener.open(request, timeout=timeout) as response:
                 response_data = json.load(response)
             if not response_data.get("done") or response_data.get("done_reason") == "length":
                 raise ValueError("Ollama returned an incomplete response")
@@ -117,10 +127,13 @@ def classify_emails(
                 raise ValueError("Expected sender_type (tech, recruitment, or others) and a non-empty explanation")
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
             raise RuntimeError(f"Classification failed for email id {record['id']}: {error}") from error
-        predictions.append({
+        completed = {
             **record,
             "prediction": prediction,
-        })
+        }
+        predictions.append(completed)
+        if on_result is not None:
+            on_result(completed)
     return predictions
 
 
@@ -196,8 +209,8 @@ def output_accuracy(results: list[dict], dataset_path: str | Path) -> dict:
     }
 
 
-# Runs classification from the command line, saves timestamped predictions and
-# accuracy reports under data/results/, and prints the score and file locations.
+# Saves each completed prediction incrementally to a timestamped JSON array,
+# then writes an accuracy report after the full dataset finishes.
 def main():
     root = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Classify an email dataset and report prediction accuracy.")
@@ -205,7 +218,10 @@ def main():
     parser.add_argument("--prompt", type=Path, default=root / "prompting" / "sender_type.txt")
     parser.add_argument("--model", default="qwen2.5:7b")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--timeout", type=int, default=300, help="Per-request timeout in seconds (default: 900)")
     args = parser.parse_args()
+    if args.timeout < 1:
+        parser.error("--timeout must be a positive integer in seconds")
 
     try:
         output_folder = root / "data" / "results"
@@ -215,16 +231,41 @@ def main():
         predictions_path = output_folder / f"{prefix}_predictions.json"
         report_path = output_folder / f"{prefix}_accuracy.json"
 
-        results = classify_emails(
-            args.dataset,
-            prompt_path=args.prompt,
-            model=args.model,
-            ollama_url=args.ollama_url,
-        )
-        with predictions_path.open("x", encoding="utf-8") as output:
-            json.dump(results, output, ensure_ascii=False, indent=2)
-            output.write("\n")
-        print(f"Predictions: {predictions_path}", flush=True)
+        with predictions_path.open("xb") as output:
+            output.write(b"[\n]\n")
+            output.flush()
+            os.fsync(output.fileno())
+            write_position = 2
+            completed_count = 0
+            print(f"Predictions: {predictions_path}", flush=True)
+
+            # Appends a finished record before the closing bracket, keeping the
+            # file valid JSON between updates and flushing each record to disk.
+            def save_result(record):
+                nonlocal write_position, completed_count
+                separator = ",\n" if completed_count else ""
+                content = (separator + json.dumps(record, ensure_ascii=False, indent=2)).encode("utf-8")
+                output.seek(write_position)
+                output.write(content)
+                write_position = output.tell()
+                output.write(b"\n]\n")
+                output.truncate()
+                output.flush()
+                os.fsync(output.fileno())
+                completed_count += 1
+                print(
+                    f"Saved {completed_count}: email id {record['id']} -> {record['prediction']['sender_type']}",
+                    flush=True,
+                )
+
+            results = classify_emails(
+                args.dataset,
+                prompt_path=args.prompt,
+                model=args.model,
+                ollama_url=args.ollama_url,
+                timeout=args.timeout,
+                on_result=save_result,
+            )
 
         report = output_accuracy(results, args.dataset)
         with report_path.open("x", encoding="utf-8") as output:
@@ -238,6 +279,8 @@ def main():
         print(f"Incorrect: {report['incorrect']}; unlabeled: {report['unlabeled']}; total: {report['total']}")
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f"Error: {error}\n")
+    except KeyboardInterrupt:
+        parser.exit(130, "Stopped. Completed predictions are preserved in data/results/.\n")
 
 
 if __name__ == "__main__":
