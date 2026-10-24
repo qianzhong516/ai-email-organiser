@@ -1,3 +1,5 @@
+import argparse
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import urllib.request
@@ -120,3 +122,123 @@ def classify_emails(
             "prediction": prediction,
         })
     return predictions
+
+
+# Compares human labels from the original dataset with model predictions by id.
+# Returns total/evaluated/correct/incorrect/unlabeled counts, accuracy_percent,
+# and comparisons containing id, expected, prediction, and correct side by side.
+def output_accuracy(results: list[dict], dataset_path: str | Path) -> dict:
+    """Measure sender-type accuracy without calling Ollama or changing files.
+
+    Uses expected.sender_type from the dataset, not the copy in results.
+    Explanations are shown for review but are not part of the accuracy score.
+    Null human labels are counted as unlabeled and excluded from the denominator.
+    Accuracy is a percentage, or None if no labeled records can be evaluated.
+    Missing, extra, duplicate, or invalid record IDs raise ValueError so partial
+    results cannot silently produce an inflated accuracy score.
+    """
+    dataset = json.loads(Path(dataset_path).read_text(encoding="utf-8"))
+    sender_types = ("tech", "recruitment", "others")
+
+    # Index records by unique IDs so different array orders do not affect scoring.
+    def index_records(records, name):
+        if not isinstance(records, list):
+            raise ValueError(f"{name} must be an array of records")
+        indexed = {}
+        for record in records:
+            if not isinstance(record, dict) or type(record.get("id")) is not int or record["id"] < 1:
+                raise ValueError(f"Each {name} record must have a positive integer id")
+            if record["id"] in indexed:
+                raise ValueError(f"Duplicate id {record['id']} in {name}")
+            indexed[record["id"]] = record
+        return indexed
+
+    expected_records = index_records(dataset, "dataset")
+    predicted_records = index_records(results, "results")
+    if expected_records.keys() != predicted_records.keys():
+        raise ValueError("Dataset and results must contain exactly the same email IDs")
+
+    comparisons = []
+    correct = 0
+    evaluated = 0
+    for email_id, record in expected_records.items():
+        expected = record.get("expected")
+        prediction = predicted_records[email_id].get("prediction")
+        if (
+            not isinstance(expected, dict)
+            or "sender_type" not in expected
+            or expected["sender_type"] not in (None, *sender_types)
+        ):
+            raise ValueError(f"Invalid expected.sender_type for email id {email_id}")
+        if not isinstance(prediction, dict) or prediction.get("sender_type") not in sender_types:
+            raise ValueError(f"Invalid prediction.sender_type for email id {email_id}")
+
+        matched = None
+        if expected["sender_type"] is not None:
+            evaluated += 1
+            matched = expected["sender_type"] == prediction["sender_type"]
+            correct += int(matched)
+        comparisons.append({
+            "id": email_id,
+            "expected": expected,
+            "prediction": prediction,
+            "correct": matched,
+        })
+
+    return {
+        "total": len(dataset),
+        "evaluated": evaluated,
+        "correct": correct,
+        "incorrect": evaluated - correct,
+        "unlabeled": len(dataset) - evaluated,
+        "accuracy_percent": round(correct / evaluated * 100, 2) if evaluated else None,
+        "comparisons": comparisons,
+    }
+
+
+# Runs classification from the command line, saves timestamped predictions and
+# accuracy reports under data/results/, and prints the score and file locations.
+def main():
+    root = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description="Classify an email dataset and report prediction accuracy.")
+    parser.add_argument("--dataset", type=Path, required=True, help="Development or test dataset JSON file")
+    parser.add_argument("--prompt", type=Path, default=root / "prompting" / "sender_type.txt")
+    parser.add_argument("--model", default="qwen2.5:7b")
+    parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
+    args = parser.parse_args()
+
+    try:
+        output_folder = root / "data" / "results"
+        output_folder.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        prefix = f"{args.dataset.stem}_{timestamp}"
+        predictions_path = output_folder / f"{prefix}_predictions.json"
+        report_path = output_folder / f"{prefix}_accuracy.json"
+
+        results = classify_emails(
+            args.dataset,
+            prompt_path=args.prompt,
+            model=args.model,
+            ollama_url=args.ollama_url,
+        )
+        with predictions_path.open("x", encoding="utf-8") as output:
+            json.dump(results, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        print(f"Predictions: {predictions_path}", flush=True)
+
+        report = output_accuracy(results, args.dataset)
+        with report_path.open("x", encoding="utf-8") as output:
+            json.dump(report, output, ensure_ascii=False, indent=2)
+            output.write("\n")
+        print(f"Accuracy report: {report_path}")
+        if report["accuracy_percent"] is None:
+            print("Accuracy: unavailable (no human-labeled records)")
+        else:
+            print(f"Accuracy: {report['accuracy_percent']:.2f}% ({report['correct']}/{report['evaluated']} correct)")
+        print(f"Incorrect: {report['incorrect']}; unlabeled: {report['unlabeled']}; total: {report['total']}")
+    except (OSError, ValueError, RuntimeError) as error:
+        parser.exit(1, f"Error: {error}\n")
+
+
+if __name__ == "__main__":
+    main()
