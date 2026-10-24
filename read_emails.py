@@ -5,7 +5,7 @@ import ssl
 
 
 # Reads inbox messages matching a JSON-style filter and returns their subject,
-# sender, and original body text without sanitizing or marking messages as read.
+# sender, date, and original body without sanitizing or marking messages as read.
 def read_emails(
     filters: dict,
     *,
@@ -20,8 +20,10 @@ def read_emails(
     defaults to 50. Limit must be a positive integer. Unsupported keys and
     values raise an error.
 
-    Returns newest arrivals first, as dictionaries with subject, sender, and
-    body. The body prefers HTML, falling back to plain text or an empty string
+    Returns newest arrivals first, as dictionaries with subject, sender, date,
+    and body. Date is the original Date header (the sender's stated sending
+    time, including any timezone), or an empty string if absent. It is not the
+    inbox arrival time. The body prefers HTML, falling back to plain text or an empty string
     if neither exists. MIME transfer encoding and character encoding are decoded;
     the decoded body is otherwise unchanged. Attachments are not returned.
     """
@@ -65,6 +67,7 @@ def read_emails(
             emails.append({
                 "subject": str(message.get("Subject", "")),
                 "sender": str(message.get("From", "")),
+                "date": str(message.get("Date", "")),
                 "body": body.get_content() if body is not None else "",
             })
     return emails
