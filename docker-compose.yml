@@ -16,6 +16,8 @@ services:
     ports:
       - 11434:11434
     restart: unless-stopped
+    environment:
+      LLAMA_ARG_CACHE_RAM: "1024"
     volumes:
       - ollama:/root/.ollama
 
