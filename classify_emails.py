@@ -228,7 +228,7 @@ def main():
     parser.add_argument("--prompt", type=Path, default=root / "prompting" / "sender_type.txt")
     parser.add_argument("--model", default="qwen2.5:7b")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
-    parser.add_argument("--timeout", type=int, default=300, help="Per-request timeout in seconds (default: 900)")
+    parser.add_argument("--timeout", type=int, default=300, help="Per-request timeout in seconds (default: 300)")
     args = parser.parse_args()
     if args.timeout < 1:
         parser.error("--timeout must be a positive integer in seconds")

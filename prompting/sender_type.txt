@@ -5,27 +5,66 @@ links. Do not invent information that is not supported by the email.
 
 Choose exactly one value: tech, recruitment, others.
 
-Apply this if/else decision order:
+Perform both checks independently for the same email, then select the final
+category. A no for one check does not imply a yes for the other check.
+Use the checks internally; do not include check results in the JSON output.
 
-1. If the email is recruitment-related correspondence, a direct job approach,
-   an application/interview/offer update, or a job digest from a recruiter,
-   hiring team, job board, or recruitment service, then choose recruitment.
-   Business referral programs, customer referrals, and affiliate promotions
-   are not recruitment unless they are actually about hiring people for jobs.
+Check 1: Does the email meet a recruitment rule?
 
-2. Else, if the sender is a news agency or general news publication, then choose
-   others, even if the newsletter covers technology or names technical authors.
+Start with recruitment_check = no.
 
-3. Else, if the sender is an independent technical blogger, technical author,
-   or blogger-run technical newsletter, and the email provides evidence of that
-   role through technical articles, explanations, tutorials, or the author's
-   technical work, then choose tech.
-   Do not choose tech merely because an advertisement, receipt, activity report,
-   or book recommendation mentions technical products or technical keywords.
+1. Set recruitment_check = no if one of the following conditions is true:
+      a. If a business referral program, customer referral, or affiliate promotion is
+      NOT about hiring people for jobs, or
+      b. If the subject uses "hire" metaphorically, such as "Hire bots" to promote AI
+      bots
 
-4. Else, then choose others. This includes shopping, receipts, social media
-   notifications, automated reports, general business marketing, vendor updates,
-   and emails without enough evidence for either tech or recruitment.
+   Set recruitment_check = yes if one of the following conditions is true:
+      a. If the email is a LinkedIn notification that someone sent the recipient a
+      message, then set recruitment_check = yes, even if the message itself is hidden.
+      This is the user's classification policy; do not invent the hidden message's
+      content. This rule does not apply to unrelated LinkedIn activity notifications.
+
+      b. If the email concerns an actual job application or interview process,
+      then set recruitment_check = yes. This includes scheduling, take-home assignments,
+      rejections, withdrawals, acknowledgements, and candidate-experience surveys,
+      even after the application process has ended.
+
+      c. If the email is a direct job approach, an offer, or a job digest from a
+      recruiter, hiring team, job board, or recruitment service, then set
+      recruitment_check = yes.
+
+Check 2: Does the email meet the technical content rule?
+
+Evaluate this check only if recruitment_check = no.
+
+2. Set tech_check = no if one of the following conditions is true:
+
+   a. If the email is an automated GitHub issue, pull-request, or repository
+   notification, even if it contains code or technical details.
+
+   b. If the email primarily announces a vendor's product features, releases,
+   or events, even if a named developer advocate sends it.
+
+   c. If the sender is a news publication, even if the email
+   discusses Linux, cybersecurity, programming, or other technical subjects.
+
+   d. If the main content concerns fundraising, investment returns, acquisitions,
+   or startup finance.
+
+   e. An advertisement, receipt, activity report, or book recommendation that merely
+   mentions technical products or keywords, even if the sender identity is a technical blogger.
+
+   Else, set tech_check = yes if one of the following conditions is true:
+   
+   a. If the sender is an independent technical blogger, technical author,
+   or blogger-run technical newsletter, and the email itself shares technical
+   articles, explanations, tutorials, or substantive discussion of the author's
+   technical work.
+
+Step 3: Select exactly one final category using the completed checks.
+
+If recruitment_check = yes, then choose recruitment. If tech_check = yes, then choose tech.  Else, choose others.
 
 Return only a JSON object with this structure:
 {"prediction": {"sender_type": "tech", "explanation": "One sentence citing evidence from this email."}}
