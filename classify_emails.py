@@ -78,6 +78,39 @@ def classify_json_emails(
     prompt = Path(prompt_path).read_text(encoding="utf-8")
     if not prompt.strip():
         raise ValueError("The classification prompt must not be empty")
+    predictions = []
+    for record in records:
+        completed = classify_email_record(
+            record, prompt=prompt, model=model, ollama_url=ollama_url, timeout=timeout,
+        )
+        predictions.append(completed)
+        if on_result is not None:
+            on_result(completed)
+    return predictions
+
+
+# Shared Ollama request logic for JSON datasets and the database worker.
+# Returns the original record plus prediction and execution_time_seconds.
+# Does not write files or access the database; human labels, previous predictions,
+# and previous execution times are excluded from model input.
+def classify_email_record(
+    record: dict,
+    *,
+    prompt: str,
+    model: str = "qwen2.5:7b",
+    ollama_url: str = "http://127.0.0.1:11434",
+    timeout: int = 900,
+) -> dict:
+    if type(timeout) is not int or timeout < 1:
+        raise ValueError("timeout must be a positive integer in seconds")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("The classification prompt must not be empty")
+    if not isinstance(record, dict) or type(record.get("id")) is not int or record["id"] < 1:
+        raise ValueError("Each record's id must be a positive integer")
+    for field in ("subject", "sender", "date", "body"):
+        if not isinstance(record.get(field), str):
+            raise ValueError(f"Each record's {field} must be a string")
+    sender_types = ("tech", "recruitment", "others")
     schema = {
         "type": "object",
         "properties": {
@@ -95,56 +128,51 @@ def classify_json_emails(
         "additionalProperties": False,
     }
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    predictions = []
-    for record in records:
-        model_input = {
-            key: value for key, value in record.items()
-            if key not in ("expected", "prediction", "execution_time_seconds")
-        }
-        payload = {
-            "model": model,
-            "stream": False,
-            "format": schema,
-            "options": {"temperature": 0, "seed": 42, "num_ctx": 16384, "num_predict": 160},
-            "messages": [
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": json.dumps(model_input, ensure_ascii=False)},
-            ],
-        }
-        request = urllib.request.Request(
-            ollama_url.rstrip("/") + "/api/chat",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-        )
-        started_at = perf_counter()
-        try:
-            with opener.open(request, timeout=timeout) as response:
-                response_data = json.load(response)
-            if not response_data.get("done") or response_data.get("done_reason") == "length":
-                raise ValueError("Ollama returned an incomplete response")
-            model_output = json.loads(response_data["message"]["content"])
-            if not isinstance(model_output, dict) or set(model_output) != {"prediction"}:
-                raise ValueError("Expected a JSON object containing only prediction")
-            prediction = model_output["prediction"]
-            if (
-                not isinstance(prediction, dict)
-                or set(prediction) != {"sender_type", "explanation"}
-                or prediction["sender_type"] not in sender_types
-                or not isinstance(prediction["explanation"], str)
-                or not prediction["explanation"].strip()
-            ):
-                raise ValueError("Expected sender_type (tech, recruitment, or others) and a non-empty explanation")
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
-            raise RuntimeError(f"Classification failed for email id {record['id']}: {error}") from error
-        completed = {
-            **record,
-            "prediction": prediction,
-            "execution_time_seconds": round(perf_counter() - started_at, 6),
-        }
-        predictions.append(completed)
-        if on_result is not None:
-            on_result(completed)
-    return predictions
+    model_input = {
+        key: value for key, value in record.items()
+        if key not in ("expected", "prediction", "execution_time_seconds")
+    }
+    payload = {
+        "model": model,
+        "stream": False,
+        "format": schema,
+        "options": {"temperature": 0, "seed": 42, "num_ctx": 16384, "num_predict": 160},
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": json.dumps(model_input, ensure_ascii=False)},
+        ],
+    }
+    request = urllib.request.Request(
+        ollama_url.rstrip("/") + "/api/chat",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    started_at = perf_counter()
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            response_data = json.load(response)
+        if not response_data.get("done") or response_data.get("done_reason") == "length":
+            raise ValueError("Ollama returned an incomplete response")
+        model_output = json.loads(response_data["message"]["content"])
+        if not isinstance(model_output, dict) or set(model_output) != {"prediction"}:
+            raise ValueError("Expected a JSON object containing only prediction")
+        prediction = model_output["prediction"]
+        if (
+            not isinstance(prediction, dict)
+            or set(prediction) != {"sender_type", "explanation"}
+            or prediction["sender_type"] not in sender_types
+            or not isinstance(prediction["explanation"], str)
+            or not prediction["explanation"].strip()
+        ):
+            raise ValueError("Expected sender_type (tech, recruitment, or others) and a non-empty explanation")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        raise RuntimeError(f"Classification failed for email id {record['id']}: {error}") from error
+    completed = {
+        **record,
+        "prediction": prediction,
+        "execution_time_seconds": round(perf_counter() - started_at, 6),
+    }
+    return completed
 
 
 # Compares human labels from the original dataset with model predictions by id.

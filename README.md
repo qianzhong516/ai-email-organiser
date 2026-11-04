@@ -68,8 +68,8 @@ header as text, while processing timestamps use timezone-aware database types.
 
 The initializer creates missing tables and leaves existing tables and rows
 untouched. It does not migrate existing schemas; use migrations for future
-schema changes. The collector stores emails and pending tasks; classification
-from the database queue is a separate step.
+schema changes. The collector stores emails and pending tasks; the classifier
+processes those tasks and stores predictions in `results`.
 
 ### Run the collector
 
@@ -90,6 +90,28 @@ then saves the parsed email and its pending task in one database transaction.
 It commits before fetching the next message. Repeated collection does not create
 duplicate emails or tasks. Cycle failures are logged before waiting for the next
 cycle. Stop with Ctrl+C. No CLI options are defined.
+
+### Run the classifier
+
+Run one classifier worker in a separate terminal:
+
+```bash
+python classifier_worker.py
+```
+
+For each pending task, it commits `status=processing` and `started_at` in a short
+transaction, then calls Ollama outside the transaction. The collector has already
+parsed the email body. The worker uses the same request settings and response
+validation as `classify_json_emails`, through shared `classify_email_record` logic.
+It sends only id, subject, sender, date, and body to the model.
+
+The result and completed task status are committed together after a successful
+response. Model failures set `status=failed` and record `last_error`. The worker
+drains pending tasks immediately, including after individual task failures, then
+waits 300 seconds when idle or after a worker/database error. No CLI options are
+defined. Run exactly one classifier: task selection uses no explicit row locks.
+Automatic retries and recovery are not implemented; interruption or a database
+failure after claiming can leave a task `processing`. Stop with Ctrl+C.
 
 ### Run tests
 
