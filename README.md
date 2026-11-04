@@ -68,9 +68,28 @@ header as text, while processing timestamps use timezone-aware database types.
 
 The initializer creates missing tables and leaves existing tables and rows
 untouched. It does not migrate existing schemas; use migrations for future
-schema changes. The email reader and classifier are not yet connected to these
-tables. In particular, the reader must return mailbox identifiers before live
-emails can be stored using this schema.
+schema changes. The collector stores emails and pending tasks; classification
+from the database queue is a separate step.
+
+### Run the collector
+
+Set `BRIDGE_USERNAME` and `BRIDGE_PASSWORD` in `.env` alongside the PostgreSQL
+settings, then run:
+
+```bash
+python collector_worker.py
+```
+
+The collector runs immediately, then waits 600 seconds between cycles. It
+collects up to 50 new unread emails per cycle. Stored mailbox identities are
+skipped before fetching bodies and before applying the limit. The reader leaves
+messages unread and returns decoded bodies without HTML processing.
+
+For each email, the collector runs `HTML_parser` as a separate processing step,
+then saves the parsed email and its pending task in one database transaction.
+It commits before fetching the next message. Repeated collection does not create
+duplicate emails or tasks. Cycle failures are logged before waiting for the next
+cycle. Stop with Ctrl+C. No CLI options are defined.
 
 ### Run tests
 

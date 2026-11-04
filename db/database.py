@@ -9,7 +9,7 @@ from sqlalchemy import Engine, URL, create_engine
 # variables. URL.create handles special characters in database passwords.
 # Creating the engine does not connect until the caller executes an operation.
 def get_engine() -> Engine:
-    load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
     required = ("POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD")
     missing = [name for name in required if not os.environ.get(name)]
     if missing:
