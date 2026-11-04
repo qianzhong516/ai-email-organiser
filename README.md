@@ -29,15 +29,48 @@ To start only the database and wait for it to accept connections:
 docker compose up -d --wait postgres
 ```
 
-PostgreSQL 18 initializes the `email_organiser` database and user by default.
-It is available to local scripts at `127.0.0.1:5432` and other Compose services
-at `postgres:5432`. Data is persisted in the `postgres_data` named volume.
-The readiness check uses `pg_isready`; it does not verify application queries
-or password authentication.
+PostgreSQL 18 initializes the database and user configured in `.env`.
+It is available to local scripts at `127.0.0.1` on `POSTGRES_PORT` (`5432` in
+`.env.example`) and other Compose services at `postgres:5432`. Data is persisted
+in the `postgres_data` named volume. The separate host port avoids conflicting
+with an existing local PostgreSQL installation.
 
 Database, user, and password initialization settings apply only when the data
 volume is empty. Changing `.env` later does not change an existing database's
-credentials. Application tables will be added separately through migrations.
+credentials.
+
+Install the database dependencies in your active virtual environment and create
+the application tables:
+
+```bash
+python -m pip install -r requirements.txt
+python init_db.py
+```
+
+`init_db.py` reads `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` from
+`.env`, with existing environment variables taking precedence. Optional
+`POSTGRES_HOST` and `POSTGRES_PORT` default to `127.0.0.1` and `5432` if omitted.
+For a client in another Compose service, override its connection settings to
+`POSTGRES_HOST=postgres` and `POSTGRES_PORT=5432` (the container's internal port).
+
+The SQLAlchemy models are defined in `models.py`:
+
+| Table         | Contents                                                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `emails`      | Account, mailbox, UIDVALIDITY, UID, optional Message-ID, subject, sender, original Date header, decoded body, and fetch timestamp.              |
+| `email_tasks` | Email foreign key, status (`pending`, `processing`, `completed`, `failed`), last error, and creation/start/completion timestamps.               |
+| `results`     | Email and task foreign keys, predicted sender type, explanation, model, prompt SHA-256 hash, execution time in seconds, and creation timestamp. |
+
+An email's account/mailbox/UIDVALIDITY/UID combination is unique. Each task has
+at most one result; a result's email must match its task's email. New tasks may
+classify an existing email again. The `date` column preserves the original Date
+header as text, while processing timestamps use timezone-aware database types.
+
+The initializer creates missing tables and leaves existing tables and rows
+untouched. It does not migrate existing schemas; use migrations for future
+schema changes. The email reader and classifier are not yet connected to these
+tables. In particular, the reader must return mailbox identifiers before live
+emails can be stored using this schema.
 
 ### Run tests
 
