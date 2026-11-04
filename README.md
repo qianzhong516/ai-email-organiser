@@ -153,10 +153,10 @@ Example outputs include a sender type and a short explanation. The allowed
 sender types are `tech`, `recruitment`, and `others`.
 
 ```python
-from classify_emails import classify_emails
+from classify_emails import classify_json_emails
 
-results = classify_emails("data/datasets/development_emails.json")
-# Or: results = classify_emails("data/datasets/test_emails.json")
+results = classify_json_emails("data/datasets/development_emails.json")
+# Or: results = classify_json_emails("data/datasets/test_emails.json")
 ```
 
 The function calls local Ollama sequentially using `qwen2.5:7b`. Optional keyword
@@ -166,7 +166,7 @@ records preserve email content and human `expected` answers, adding a separate
 `prediction` object with `sender_type` and `explanation`. Compare
 `expected.sender_type` with `prediction.sender_type` to evaluate accuracy; the
 explanation is for inspecting mistakes. The original dataset file is not
-modified. Calling `classify_emails()` directly does not save output unless you
+modified. Calling `classify_json_emails()` directly does not save output unless you
 provide an `on_result` callback; the CLI uses that callback to save incrementally.
 
 ### Measure prediction accuracy
@@ -183,10 +183,10 @@ from the reference file's `expected.sender_type`; null labels are excluded from
 the accuracy calculation.
 
 ```python
-from classify_emails import classify_emails, output_accuracy
+from classify_emails import classify_json_emails, output_accuracy
 
 dataset = "data/datasets/development_emails.json"
-results = classify_emails(dataset)
+results = classify_json_emails(dataset)
 accuracy = output_accuracy(results, dataset)
 print(accuracy["accuracy_percent"])
 print(accuracy["comparisons"])

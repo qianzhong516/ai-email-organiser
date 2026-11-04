@@ -28,7 +28,7 @@ import urllib.request
 # ]
 # expected retains the human label (or null); prediction.sender_type is one of
 # "tech", "recruitment", or "others". Any additional input fields are preserved.
-def classify_emails(
+def classify_json_emails(
     dataset_path: str | Path,
     *,
     prompt_path: str | Path = Path(__file__).resolve().parent / "prompting" / "sender_type.txt",
@@ -268,7 +268,7 @@ def main():
                     flush=True,
                 )
 
-            results = classify_emails(
+            results = classify_json_emails(
                 args.dataset,
                 prompt_path=args.prompt,
                 model=args.model,

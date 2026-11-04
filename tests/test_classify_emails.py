@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from classify_emails import classify_emails
+from classify_emails import classify_json_emails
 
 
 # Supplies one correctly shaped record that individual tests can modify.
@@ -37,7 +37,7 @@ def test_dataset_must_be_an_array(inputs, dataset):
     path, prompt, opener = inputs
     path.write_text(json.dumps(dataset), encoding="utf-8")
     with pytest.raises(ValueError, match="must be a JSON array"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -46,7 +46,7 @@ def test_dataset_must_be_valid_json(inputs):
     path, prompt, opener = inputs
     path.write_text('[{"id":', encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -56,7 +56,7 @@ def test_each_record_must_be_an_object(inputs, record):
     path, prompt, opener = inputs
     path.write_text(json.dumps([record]), encoding="utf-8")
     with pytest.raises(ValueError, match="Each record must contain"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -67,7 +67,7 @@ def test_record_requires_all_dataset_fields(inputs, email_record, field):
     del email_record[field]
     path.write_text(json.dumps([email_record]), encoding="utf-8")
     with pytest.raises(ValueError, match="Each record must contain"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -78,7 +78,7 @@ def test_expected_requires_sender_type(inputs, email_record, expected):
     email_record["expected"] = expected
     path.write_text(json.dumps([email_record]), encoding="utf-8")
     with pytest.raises(ValueError, match="Each record must contain"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -89,7 +89,7 @@ def test_id_must_be_a_positive_integer(inputs, email_record, record_id):
     email_record["id"] = record_id
     path.write_text(json.dumps([email_record]), encoding="utf-8")
     with pytest.raises(ValueError, match="id must be a positive integer"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -101,7 +101,7 @@ def test_email_fields_must_be_strings(inputs, email_record, field, value):
     email_record[field] = value
     path.write_text(json.dumps([email_record]), encoding="utf-8")
     with pytest.raises(ValueError, match=f"{field} must be a string"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -112,7 +112,7 @@ def test_expected_sender_type_must_be_supported(inputs, email_record, sender_typ
     email_record["expected"]["sender_type"] = sender_type
     path.write_text(json.dumps([email_record]), encoding="utf-8")
     with pytest.raises(ValueError, match="expected.sender_type must be"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -121,7 +121,7 @@ def test_later_invalid_record_prevents_all_model_requests(inputs, email_record):
     path, prompt, opener = inputs
     path.write_text(json.dumps([email_record, {"id": 2}]), encoding="utf-8")
     with pytest.raises(ValueError, match="Each record must contain"):
-        classify_emails(path, prompt_path=prompt)
+        classify_json_emails(path, prompt_path=prompt)
     opener.assert_not_called()
 
 
@@ -140,7 +140,7 @@ def test_valid_dataset_preserves_labels_and_separates_prediction(inputs, email_r
     response = {"done": True, "message": {"content": json.dumps({"prediction": prediction})}}
     opener.return_value.open.return_value.__enter__.return_value = io.BytesIO(json.dumps(response).encode())
 
-    result = classify_emails(path, prompt_path=prompt)
+    result = classify_json_emails(path, prompt_path=prompt)
 
     assert result == [{
         **email_record,
