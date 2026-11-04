@@ -13,9 +13,31 @@ CONTAINER ID   NAME                                  CPU %     MEM USAGE / LIMIT
 
 ### Start the app
 
+Before the first start, copy `.env.example` to `.env` and replace
+`POSTGRES_PASSWORD` with a strong password. If `.env` already exists, add the
+PostgreSQL settings to it instead. `.env` is excluded from Git.
+
 ```bash
 ./start.sh
 ```
+
+### PostgreSQL
+
+To start only the database and wait for it to accept connections:
+
+```bash
+docker compose up -d --wait postgres
+```
+
+PostgreSQL 18 initializes the `email_organiser` database and user by default.
+It is available to local scripts at `127.0.0.1:5432` and other Compose services
+at `postgres:5432`. Data is persisted in the `postgres_data` named volume.
+The readiness check uses `pg_isready`; it does not verify application queries
+or password authentication.
+
+Database, user, and password initialization settings apply only when the data
+volume is empty. Changing `.env` later does not change an existing database's
+credentials. Application tables will be added separately through migrations.
 
 ### Run tests
 
