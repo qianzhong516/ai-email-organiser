@@ -1,4 +1,19 @@
 services:
+  healthchecks:
+    build:
+      context: .
+      dockerfile: Dockerfile.healthchecks
+    restart: unless-stopped
+    init: true
+    environment:
+      CLASSIFIER_HEARTBEAT_PATH: /run/email-organiser/classifier-heartbeat
+    volumes:
+      - classifier_heartbeat:/run/email-organiser:ro
+    healthcheck:
+      test: ["CMD", "python", "classifier_healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      retries: 1
   classifier:
     build:
       context: .
@@ -13,11 +28,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       OLLAMA_URL: http://ollama:11434
-    healthcheck:
-      test: ["CMD", "python", "classifier_healthcheck.py"]
-      interval: 30s
-      timeout: 5s
-      retries: 1
+      CLASSIFIER_HEARTBEAT_PATH: /run/email-organiser/classifier-heartbeat
+    volumes:
+      - classifier_heartbeat:/run/email-organiser
     depends_on:
       - postgres
       - ollama
@@ -75,6 +88,7 @@ services:
       - ollama:/root/.ollama
 
 volumes:
+  classifier_heartbeat:
   postgres_data:
   protonmail:
     name: protonmail

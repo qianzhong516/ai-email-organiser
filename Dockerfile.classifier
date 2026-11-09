@@ -7,9 +7,11 @@ WORKDIR /app
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
-    && useradd --create-home --uid 10001 worker
+    && useradd --create-home --uid 10001 worker \
+    && mkdir -p /run/email-organiser \
+    && chown worker:worker /run/email-organiser
 
-COPY classifier_worker.py classify_emails.py classifier_healthcheck.py ./
+COPY classifier_worker.py classify_emails.py heartbeat_settings.py ./
 COPY db/database.py db/models.py ./db/
 COPY prompting/sender_type.txt ./prompting/
 

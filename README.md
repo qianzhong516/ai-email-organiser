@@ -135,15 +135,26 @@ or prompt. Use either the host process or the classifier container, with only
 one classifier active at a time.
 
 The classifier writes a heartbeat every 15 seconds from a background thread.
-Docker checks it every 30 seconds and marks the container unhealthy if the file
-is missing, invalid, or at least 45 seconds old. A single failed probe is enough;
-the stale heartbeat is detected at the next scheduled check, not necessarily at
-exactly 45 seconds. View its status with `docker compose ps classifier`.
+The separate `healthchecks` container reads it from a shared volume mounted
+read-only. Docker runs the check in that container every 30 seconds, marking
+`healthchecks` unhealthy if the heartbeat is missing, invalid, or at least
+60 seconds old. A single failed probe is enough; detection happens at the next
+scheduled check. The classifier itself no longer has a Docker health check.
+
+```bash
+docker compose up -d --build classifier healthchecks
+docker compose ps classifier healthchecks
+```
+
+The shared health-check container currently runs only the classifier heartbeat
+check. It remains running independently when the classifier stops. Its main
+process stays idle while Docker executes the periodic probe; no database checks,
+Ollama checks, or notifications are included.
 
 The heartbeat measures worker liveness during long LLM requests and idle waits;
 it does not prove the LLM request is making progress. Docker health status alone
 does not restart the container. Task recovery remains in PostgreSQL; the local
-heartbeat file is temporary and removed on normal worker shutdown.
+heartbeat file is stored on the shared volume and removed on normal worker shutdown.
 
 ```bash
 docker compose logs -f classifier

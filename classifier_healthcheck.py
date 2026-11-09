@@ -1,8 +1,7 @@
-from pathlib import Path
 import time
 
+from heartbeat_settings import HEARTBEAT_PATH
 
-HEARTBEAT_PATH = Path("/tmp/email-classifier-heartbeat")
 HEARTBEAT_TIMEOUT_SECONDS = 60
 
 

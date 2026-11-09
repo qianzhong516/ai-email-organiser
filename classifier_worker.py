@@ -10,7 +10,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from classify_emails import classify_email_record
-from classifier_healthcheck import HEARTBEAT_PATH
+from heartbeat_settings import HEARTBEAT_PATH
 from db.database import get_engine
 from db.models import Email, EmailTask, Result
 
