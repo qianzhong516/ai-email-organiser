@@ -80,8 +80,29 @@ settings, then run:
 python collector_worker.py
 ```
 
+To run the collector continuously in Docker instead:
+
+```bash
+docker compose up -d --build collector
+```
+
+The container runs the same worker and uses `restart: unless-stopped`. It connects
+to `postgres:5432` and `protonmail-bridge:143` on the Compose network. Its database
+and Bridge credentials are supplied at runtime from `.env`; the file is excluded
+from the image. Host execution continues to use the local connection defaults.
+PostgreSQL's application tables must already be initialized.
+
+View logs or stop the collector with:
+
+```bash
+docker compose logs -f collector
+docker compose stop collector
+```
+
+After source changes, rebuild with `docker compose up -d --build collector`.
+
 The collector runs immediately, then waits 600 seconds between cycles. It
-collects up to 50 new unread emails per cycle. Stored mailbox identities are
+collects up to 10 new unread emails per cycle. Stored mailbox identities are
 skipped before fetching bodies and before applying the limit. The reader leaves
 messages unread and returns decoded bodies without HTML processing.
 

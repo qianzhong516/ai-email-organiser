@@ -13,8 +13,9 @@ def read_emails(
     username: str,
     password: str,
     port: int = 1143,
+    host: str = "127.0.0.1",
 ) -> list[dict[str, str]]:
-    return list(iter_emails(filters, username=username, password=password, port=port))
+    return list(iter_emails(filters, username=username, password=password, port=port, host=host))
 
 
 # Yields emails one at a time so the collector can commit each email before
@@ -26,10 +27,14 @@ def iter_emails(
     username: str,
     password: str,
     port: int = 1143,
+    host: str = "127.0.0.1",
     include_metadata: bool = False,
     exclude_ids: set[tuple[int, int]] | None = None,
 ) -> Iterator[dict]:
-    """Read emails through Proton Mail Bridge at 127.0.0.1 using STARTTLS.
+    """Read emails through Proton Mail Bridge using STARTTLS.
+
+    Defaults to 127.0.0.1:1143 for host execution. Containers can use the
+    Compose service name and internal port instead.
 
     Supported filters: {"status": "read" | "unread", "limit": 50}.
     Omitting status includes both read and unread messages. Omitting limit
@@ -67,9 +72,9 @@ def iter_emails(
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE  # Accept Bridge's self-signed cert on loopback only.
+    context.verify_mode = ssl.CERT_NONE  # Accept the configured Bridge's self-signed cert; use a trusted local/Docker network.
 
-    with imaplib.IMAP4("127.0.0.1", port, timeout=30) as mail:
+    with imaplib.IMAP4(host, port, timeout=30) as mail:
         checked(mail.starttls(ssl_context=context))
         checked(mail.login(username, password))
         checked(mail.select("INBOX", readonly=True))

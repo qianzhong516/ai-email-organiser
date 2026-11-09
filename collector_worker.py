@@ -37,6 +37,8 @@ def collect_emails(engine: Engine, *, username: str, password: str) -> int:
         {"status": "unread", "limit": EMAIL_LIMIT},
         username=username,
         password=password,
+        host=os.environ.get("BRIDGE_HOST", "127.0.0.1"),
+        port=int(os.environ.get("BRIDGE_PORT", "1143")),
         include_metadata=True,
         exclude_ids=known_ids,
     )) as emails:
