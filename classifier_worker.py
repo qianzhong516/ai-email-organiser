@@ -3,22 +3,44 @@ import hashlib
 import logging
 import os
 from pathlib import Path
+import threading
 import time
 
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
 from classify_emails import classify_email_record
+from classifier_healthcheck import HEARTBEAT_PATH
 from db.database import get_engine
 from db.models import Email, EmailTask, Result
 
 
 CHECK_INTERVAL_SECONDS = 300
+HEARTBEAT_INTERVAL_SECONDS = 15
 PROMPT_PATH = Path(__file__).resolve().parent / "prompting" / "sender_type.txt"
 MODEL = "qwen2.5:7b"
 OLLAMA_URL = "http://127.0.0.1:11434"
 REQUEST_TIMEOUT_SECONDS = 900
 logger = logging.getLogger(__name__)
+
+
+# Publishes a monotonic timestamp with an atomic rename so Docker cannot read a
+# partially written heartbeat. This temporary file is not task recovery state.
+def write_heartbeat() -> None:
+    temporary = HEARTBEAT_PATH.with_suffix(".tmp")
+    temporary.write_text(str(time.monotonic()), encoding="utf-8")
+    temporary.replace(HEARTBEAT_PATH)
+
+
+# Updates the heartbeat while the main thread waits for Ollama or the next poll.
+# Event.wait lets shutdown interrupt the 15-second wait immediately. Write errors
+# are logged; the unchanged heartbeat will eventually fail Docker's health check.
+def heartbeat_loop(stop_event: threading.Event) -> None:
+    while not stop_event.wait(HEARTBEAT_INTERVAL_SECONDS):
+        try:
+            write_heartbeat()
+        except OSError:
+            logger.exception("Classifier heartbeat update failed")
 
 
 # Claims one pending task and commits processing/started_at before calling the
@@ -90,8 +112,17 @@ def classify_next_task(engine: Engine) -> str | None:
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     engine = None
+    stop_event = threading.Event()
+    heartbeat_thread = None
     try:
         engine = get_engine()
+        write_heartbeat()
+        heartbeat_thread = threading.Thread(
+            target=heartbeat_loop, args=(stop_event,), daemon=True,
+            name="classifier-heartbeat",
+        )
+        heartbeat_thread.start()
+        logger.info("Heartbeat started: interval=%ss", HEARTBEAT_INTERVAL_SECONDS)
         while True:
             try:
                 outcome = classify_next_task(engine)
@@ -108,6 +139,13 @@ def main() -> int:
         logger.exception("Classifier startup failed")
         return 1
     finally:
+        stop_event.set()
+        if heartbeat_thread is not None:
+            heartbeat_thread.join(timeout=2)
+        try:
+            HEARTBEAT_PATH.unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Could not remove classifier heartbeat")
         if engine is not None:
             engine.dispose()
 
