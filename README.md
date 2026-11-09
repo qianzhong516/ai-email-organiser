@@ -122,6 +122,23 @@ Run one classifier worker in a separate terminal:
 python classifier_worker.py
 ```
 
+Or run it continuously in its own container:
+
+```bash
+docker compose up -d --build classifier
+```
+
+The classifier container connects to `postgres:5432` and `http://ollama:11434`.
+It includes the current `prompting/sender_type.txt` file, runs with
+`restart: unless-stopped`, and logs to Docker. Rebuild after editing the worker
+or prompt. Use either the host process or the classifier container, with only
+one classifier active at a time.
+
+```bash
+docker compose logs -f classifier
+docker compose stop classifier
+```
+
 For each pending task, it commits `status=processing` and `started_at` in a short
 transaction, then calls Ollama outside the transaction. The collector has already
 parsed the email body. The worker uses the same request settings and response

@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && useradd --create-home --uid 10001 worker
+
+COPY classifier_worker.py classify_emails.py ./
+COPY db/database.py db/models.py ./db/
+COPY prompting/sender_type.txt ./prompting/
+
+USER worker
+
+CMD ["python", "classifier_worker.py"]

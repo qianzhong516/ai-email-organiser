@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import hashlib
 import logging
+import os
 from pathlib import Path
 import time
 
@@ -51,7 +52,7 @@ def classify_next_task(engine: Engine) -> str | None:
     try:
         completed = classify_email_record(
             record, prompt=prompt, model=MODEL,
-            ollama_url=OLLAMA_URL, timeout=REQUEST_TIMEOUT_SECONDS,
+            ollama_url=os.environ.get("OLLAMA_URL", OLLAMA_URL), timeout=REQUEST_TIMEOUT_SECONDS,
         )
     except Exception as error:
         with Session(engine) as session, session.begin():
