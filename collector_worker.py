@@ -14,11 +14,10 @@ from read_emails import iter_emails
 
 
 COLLECTION_INTERVAL_SECONDS = 600
-EMAIL_LIMIT = 10
 logger = logging.getLogger(__name__)
 
 
-# Collects new unread emails without changing read flags or labels. Parses each
+# Collects all new unread emails without changing read flags or labels. Parses each
 # fetched body outside the reader and the database transaction, then atomically
 # saves the email and its pending task before fetching the next email.
 def collect_emails(engine: Engine, *, username: str, password: str) -> int:
@@ -34,7 +33,7 @@ def collect_emails(engine: Engine, *, username: str, password: str) -> int:
 
     queued = 0
     with closing(iter_emails(
-        {"status": "unread", "limit": EMAIL_LIMIT},
+        {"status": "unread", "limit": None},
         username=username,
         password=password,
         host=os.environ.get("BRIDGE_HOST", "127.0.0.1"),

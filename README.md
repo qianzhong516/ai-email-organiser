@@ -102,8 +102,10 @@ docker compose stop collector
 After source changes, rebuild with `docker compose up -d --build collector`.
 
 The collector runs immediately, then waits 600 seconds between cycles. It
-collects up to 10 new unread emails per cycle. Stored mailbox identities are
-skipped before fetching bodies and before applying the limit. The reader leaves
+collects all unread emails found at the start of each cycle that are not already
+stored, without an email limit. Stored mailbox identities are skipped before
+fetching bodies. Emails arriving during collection are picked up on the next
+cycle. The reader leaves
 messages unread and returns decoded bodies without HTML processing.
 
 For each email, the collector runs `HTML_parser` as a separate processing step,

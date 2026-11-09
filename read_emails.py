@@ -38,8 +38,8 @@ def iter_emails(
 
     Supported filters: {"status": "read" | "unread", "limit": 50}.
     Omitting status includes both read and unread messages. Omitting limit
-    defaults to 50. Limit must be a positive integer. Unsupported keys and
-    values raise an error.
+    defaults to 50. Set limit to None to fetch all matching messages; otherwise,
+    limit must be a positive integer. Unsupported keys and values raise an error.
 
     Yields newest arrivals first, as dictionaries with subject, sender, date,
     and body. Date is the original Date header (the sender's stated sending
@@ -58,8 +58,8 @@ def iter_emails(
     if "status" in filters and filters["status"] not in ("read", "unread"):
         raise ValueError("status must be 'read' or 'unread'")
     limit = filters.get("limit", 50)
-    if type(limit) is not int or limit < 1:
-        raise ValueError("limit must be a positive integer")
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError("limit must be a positive integer or None")
 
     criterion = {"read": "SEEN", "unread": "UNSEEN"}.get(filters.get("status"), "ALL")
 
