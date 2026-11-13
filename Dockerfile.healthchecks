@@ -13,5 +13,5 @@ COPY classifier_healthcheck.py heartbeat_settings.py ./
 
 USER worker
 
-# Docker runs the configured probes; the main process keeps their container up.
-CMD ["sleep", "infinity"]
+# The Python process runs the checks continuously and logs each result.
+CMD ["python", "classifier_healthcheck.py"]

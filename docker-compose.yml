@@ -5,15 +5,11 @@ services:
       dockerfile: Dockerfile.healthchecks
     restart: unless-stopped
     init: true
+    stop_signal: SIGINT
     environment:
       CLASSIFIER_HEARTBEAT_PATH: /run/email-organiser/classifier-heartbeat
     volumes:
       - classifier_heartbeat:/run/email-organiser:ro
-    healthcheck:
-      test: ["CMD", "python", "classifier_healthcheck.py"]
-      interval: 30s
-      timeout: 5s
-      retries: 1
   classifier:
     build:
       context: .

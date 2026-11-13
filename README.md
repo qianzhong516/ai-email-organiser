@@ -136,10 +136,15 @@ one classifier active at a time.
 
 The classifier writes a heartbeat every 15 seconds from a background thread.
 The separate `healthchecks` container reads it from a shared volume mounted
-read-only. Docker runs the check in that container every 30 seconds, marking
-`healthchecks` unhealthy if the heartbeat is missing, invalid, or at least
-60 seconds old. A single failed probe is enough; detection happens at the next
-scheduled check. The classifier itself no longer has a Docker health check.
+read-only. Its Python process checks immediately and then every 30 seconds,
+logging a failure if the heartbeat is missing, invalid, or at least 60 seconds
+old. A failed check does not stop the monitor; it keeps checking for recovery.
+Neither container has a Docker-scheduled health check. Check results appear in
+`docker compose logs -f healthchecks`; Docker reports the container as running,
+without a separate healthy/unhealthy status.
+Each result includes `check_time` and `latest_heartbeat` in UTC, plus heartbeat
+`age` in seconds. The latest heartbeat time is the heartbeat file's last-write
+time; freshness is still evaluated using the monotonic timestamp in the file.
 
 ```bash
 docker compose up -d --build classifier healthchecks
@@ -148,12 +153,12 @@ docker compose ps classifier healthchecks
 
 The shared health-check container currently runs only the classifier heartbeat
 check. It remains running independently when the classifier stops. Its main
-process stays idle while Docker executes the periodic probe; no database checks,
-Ollama checks, or notifications are included.
+process runs the periodic checks; no database checks, Ollama checks, or
+notifications are included.
 
 The heartbeat measures worker liveness during long LLM requests and idle waits;
-it does not prove the LLM request is making progress. Docker health status alone
-does not restart the container. Task recovery remains in PostgreSQL; the local
+it does not prove the LLM request is making progress. Failed checks are logged
+and do not trigger restarts. Task recovery remains in PostgreSQL; the local
 heartbeat file is stored on the shared volume and removed on normal worker shutdown.
 
 ```bash
